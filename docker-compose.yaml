@@ -1,0 +1,21 @@
+services:
+  server:
+    build: .
+    ports:
+      - "8000:${SERVER_PORT}"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      SERVER_PORT: ${SERVER_PORT}
+      MONGODB_URI: ${MONGODB_URI}
+      REDIS_URI: ${REDIS_URI}
+  redis:
+    image: redis
+    command: echo 'aclfile /usr/local/etc/redis/users.acl' | redis-server /usr/local/etc/redis/redis.conf
+    volumes:
+      - ./users.acl:/usr/local/etc/redis/users.acl
+    ports:
+      - "6379"
+
+secrets:
+  .env:
+    file: ./.env

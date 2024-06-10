@@ -27,7 +27,7 @@ go.work.sum
 
 # Go Air files and directories
 .air.toml
-server/tmp/
+tmp/
 
 # Redis config and dumps
 *.acl
