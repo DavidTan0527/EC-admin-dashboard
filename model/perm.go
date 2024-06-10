@@ -31,34 +31,37 @@ func (handler *PermissionHandler) CheckPerm(c echo.Context) error {
         return err
     }
 
-    view, err := handler.canView(userId, body.Key)
+    perm, err := handler.isMember("user:" + userId, PERM_SET_KEY_PREFIX + body.Key)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, echo.Map{ "success": false, "message": "Error getting view permission" })
+        c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
         return err
     }
 
-    edit, err := handler.canEdit(userId, body.Key)
-    if err != nil {
-        c.JSON(http.StatusInternalServerError, echo.Map{ "success": false, "message": "Error getting edit permission" })
-        return err
-    }
-
-    c.JSON(http.StatusOK, echo.Map{ "success": true, "data": Permission{ view, edit } })
+    c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Data: perm })
 
     return nil
 }
 
 func (handler *PermissionHandler) SetPerm(c echo.Context) error {
-    c.String(http.StatusOK, "set perm")
+    claims := GetJwtClaims(c)
+    userId := claims.UserId
+
+    body := new(CheckPermBody)
+    if err := GetRequestBody(c, body); err != nil {
+        return err
+    }
+
+    ctx := context.Background()
+    cmd := handler.HandlerConns.Redis.SAdd(ctx, PERM_SET_KEY_PREFIX + body.Key, "user:" + userId)
+
+    if _, err := cmd.Result(); err != nil {
+        c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error adding permission key" })
+        return err
+    }
+
+    c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Message: "Added permission key " + body.Key })
+
     return nil
-}
-
-func (handler *PermissionHandler) canView(userId string, key string) (bool, error) {
-    return handler.isMember("user:" + userId, PERM_SET_KEY_PREFIX + key + "_View")
-}
-
-func (handler *PermissionHandler) canEdit(userId string, key string) (bool, error) {
-    return handler.isMember("user:" + userId, PERM_SET_KEY_PREFIX + key + "_Edit")
 }
 
 func (handler *PermissionHandler) isMember(member string, key string) (bool, error) {

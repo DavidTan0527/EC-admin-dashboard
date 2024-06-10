@@ -41,7 +41,7 @@ func initRoutes(conns *model.HandlerConns) *echo.Echo {
 
 	// Start server
 	go func() {
-		if err := e.Start("localhost:" + os.Getenv("SERVER_PORT")); err != nil && err != http.ErrServerClosed {
+		if err := e.Start(":" + os.Getenv("SERVER_PORT")); err != nil && err != http.ErrServerClosed {
             e.Logger.Debug(err)
 			e.Logger.Fatal("shutting down the server")
 		}
@@ -90,6 +90,7 @@ func initMiddlewares() *Middlewares {
                 claims := model.GetJwtClaims(c)
                 if !claims.IsSuper {
                     c.Error(echo.NewHTTPError(http.StatusUnauthorized, "Not super user"))
+                    return nil
                 }
 
                 if err := next(c); err != nil {
