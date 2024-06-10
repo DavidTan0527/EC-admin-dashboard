@@ -3,6 +3,7 @@
 #
 tags
 .env
+*.bkp
 
 # Binaries for programs and plugins
 *.exe

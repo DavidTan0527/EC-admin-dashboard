@@ -9,10 +9,12 @@ import (
 
 	"github.com/DavidTan0527/EC-admin-dashboard/server/auth"
 	"github.com/DavidTan0527/EC-admin-dashboard/server/model"
+	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
 )
 
 // Middlewares for handlers
@@ -23,7 +25,7 @@ type Middlewares struct {
 
 func initRoutes(conns *model.HandlerConns) *echo.Echo {
     e := echo.New()
-    setupLogging(e)
+    setupMiddlewares(e)
 
 	e.GET("/ping", func(c echo.Context) error {
 		return c.String(http.StatusOK, "Hello, World!")
@@ -40,6 +42,7 @@ func initRoutes(conns *model.HandlerConns) *echo.Echo {
 	// Start server
 	go func() {
 		if err := e.Start("localhost:" + os.Getenv("SERVER_PORT")); err != nil && err != http.ErrServerClosed {
+            e.Logger.Debug(err)
 			e.Logger.Fatal("shutting down the server")
 		}
 	}()
@@ -62,6 +65,7 @@ func initUserRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *
     e.POST("/login", handler.LoginUser)
     e.POST("/register", handler.CreateUser, middlewares.Jwt)
     e.GET("/user/:id", handler.GetUser, middlewares.Jwt)
+    e.GET("/users", handler.GetAllUsers, middlewares.Jwt, middlewares.IsSuper)
 }
 
 func initPermRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *Middlewares) {
@@ -83,8 +87,7 @@ func initMiddlewares() *Middlewares {
             return func (c echo.Context) error {
                 claims := model.GetJwtClaims(c)
                 if !claims.IsSuper {
-                    // c.JSON(http.StatusUnauthorized, nil)
-                    c.Error(nil)
+                    c.Error(echo.NewHTTPError(http.StatusUnauthorized, "Not super user"))
                 }
 
                 if err := next(c); err != nil {
@@ -97,9 +100,11 @@ func initMiddlewares() *Middlewares {
     }
 }
 
-func setupLogging(e *echo.Echo) {
+func setupMiddlewares(e *echo.Echo) {
+    e.Logger.SetLevel(log.DEBUG)
     e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
         Format: "method=${method}, uri=${uri} (${latency_human}), status=${status}\nerror: ${error}\n",
     }))
+    e.Validator = &RequestValidator{ validator: validator.New() }
 }
 

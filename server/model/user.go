@@ -3,9 +3,7 @@ package model
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"os"
 
@@ -29,44 +27,33 @@ type User struct {
     IsSuper  bool               `bson:"is_super" json:"is_super"`
 }
 
+type LoginUserBody struct {
+    Username string `json:"username" validate:"required"`
+    Password string `json:"password" validate:"required"`
+}
+
 func (handler *UserHandler) LoginUser(c echo.Context) error {
-    data, err := GetRequestBody(c)
-    if err != nil {
-        return err
+    body := new(LoginUserBody)
+    if err := GetRequestBody(c, body); err != nil {
+      return err
     }
 
-    username, ok := data["username"].(string)
-    if !ok {
-        c.JSON(http.StatusBadRequest, HttpResponseBody{ Success: false, Message: "'username' missing" })
-        return echo.ErrBadRequest
-    }
-
-    password, ok := data["password"].(string)
-    if !ok {
-        c.JSON(http.StatusBadRequest, HttpResponseBody{ Success: false, Message: "'password' missing" })
-        return echo.ErrBadRequest
-    }
-
-    userColl := handler.HandlerConns.Db.Collection("User")
+    coll := handler.HandlerConns.Db.Collection("User")
 
     user := new(User)
-    if err = userColl.FindOne(context.Background(), bson.M{"username": username}).Decode(user); err != nil {
+    if err := coll.FindOne(context.Background(), bson.M{"username": body.Username}).Decode(user); err != nil {
         if err == mongo.ErrNoDocuments {
             c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Username or password incorrect" })
-            return echo.ErrUnauthorized
+            return nil
         }
         return err
     }
 
-    salt, err := hex.DecodeString(user.Salt)
+    correct, err := verifyPassword(body.Password, user.Salt, user.Password)
     if err != nil {
         return err
     }
-    saltedPwd := append([]byte(password), salt...)
-    pwdHash, err := sha256Hash(saltedPwd)
-    pwd := hex.EncodeToString(pwdHash)
-
-    if pwd != user.Password {
+    if !correct {
         c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Username or password incorrect" })
         return nil
     }
@@ -77,11 +64,12 @@ func (handler *UserHandler) LoginUser(c echo.Context) error {
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims) 
 
     t, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
-    fmt.Println(os.Getenv("JWT_SECRET"))
     if err != nil {
         c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error generating JWT token" })
         return err
     }
+
+    c.Logger().Info("User " + user.Username + " logged in")
 
     c.JSON(http.StatusOK, HttpResponseBody{
         Success: true,
@@ -92,59 +80,35 @@ func (handler *UserHandler) LoginUser(c echo.Context) error {
     return nil
 }
 
-
+type CreateUserBody struct {
+    Username string `json:"username" validate:"required"`
+    Password string `json:"password" validate:"required"`
+    IsSuper  bool   `json:"is_super" validate:"boolean"`
+}
 
 func (handler *UserHandler) CreateUser(c echo.Context) error {
-    data, err := GetRequestBody(c)
-    if err != nil {
+    body := new(CreateUserBody)
+    if err := GetRequestBody(c, body); err != nil {
         return err
     }
 
-    username, ok := data["username"].(string)
-    if !ok {
-        c.JSON(http.StatusBadRequest, HttpResponseBody{ Success: false, Message: "'username' missing" })
-        return echo.ErrBadRequest
-    }
-
-    password, ok := data["password"].(string)
-    if !ok {
-        c.JSON(http.StatusBadRequest, HttpResponseBody{ Success: false, Message: "'password' missing" })
-        return echo.ErrBadRequest
-    }
-
-    isSuper, ok := data["is_super"].(bool)
-    if !ok {
-        isSuper = false
-    }
-
     claims := GetJwtClaims(c)
-    if isSuper && !claims.IsSuper {
+    if body.IsSuper && !claims.IsSuper {
         c.JSON(http.StatusUnauthorized, HttpResponseBody{ Success: false, Message: "Only super users can create super users" })
         return echo.ErrUnauthorized
     }
 
     user := new(User)
     user.Id = primitive.NewObjectID()
-    user.Username = username
-    user.IsSuper = isSuper
+    user.Username = body.Username
+    user.IsSuper = body.IsSuper
 
-    salt := make([]byte, 32)
-    if _, err = rand.Read(salt); err != nil {
-        c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error generating salt" })
-        return err
-    }
-    user.Salt = hex.EncodeToString(salt)
-
-    saltedPwd := append([]byte(password), salt...)
-    pwdHash, err := sha256Hash(saltedPwd)
+    password, salt, err := generateSaltAndPasswordHash(body.Password)
     if err != nil {
-        c.JSON(http.StatusInternalServerError, echo.Map{
-            "success": false,
-            "message": "Error hashing password",
-        })
         return err
     }
-    user.Password = hex.EncodeToString(pwdHash)
+    user.Password = password
+    user.Salt = salt
 
     coll := handler.HandlerConns.Db.Collection("User")
     if err := coll.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(new(User)); err == nil {
@@ -155,10 +119,10 @@ func (handler *UserHandler) CreateUser(c echo.Context) error {
         return err
     }
 
-    fmt.Println("Creating user " + user.Username + " with password hash " + user.Password)
+    c.Logger().Info("Creating user " + user.Username + " with password hash " + user.Password)
 
     if res, err := coll.InsertOne(context.Background(), user); err != nil {
-        fmt.Println(res)
+        c.Logger().Info(res)
         c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Cannot save user into DB" })
         return err
     }
@@ -167,15 +131,16 @@ func (handler *UserHandler) CreateUser(c echo.Context) error {
     return nil
 }
 
-
-
 func (handler *UserHandler) GetUser(c echo.Context) error {
     id, err := primitive.ObjectIDFromHex(c.Param("id"))
     if err != nil {
         return err
     }
 
-    fmt.Println("Getting user with id " + id.String())
+    claims := GetJwtClaims(c)
+    if !claims.IsSuper && id.String() != claims.UserId {
+        return echo.NewHTTPError(http.StatusUnauthorized, "Non-super users cannot get other users")
+    }
 
     user := new(User)
 
@@ -184,30 +149,116 @@ func (handler *UserHandler) GetUser(c echo.Context) error {
     err = result.Decode(user)
     if err != nil {
         if err == mongo.ErrNoDocuments {
-            c.JSON(http.StatusOK, HttpResponseBody{
-                Success: false,
-                Message: "User not found",
-            })
+            c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "User not found" })
             return nil
         }
         return err
     }
 
-    c.JSON(http.StatusOK, HttpResponseBody{
-        Success: true,
-        Message: "User not found",
-        Data: user,
-    })
+    c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Data: user })
 
     return nil
 }
 
-func sha256Hash(input []byte) ([]byte, error) {
-    hasher := sha256.New()
-    if _, err := hasher.Write(input); err != nil {
-        return nil, err
+func (handler *UserHandler) GetAllUsers(c echo.Context) error {
+    claims := GetJwtClaims(c)
+    if !claims.IsSuper {
+        return echo.NewHTTPError(http.StatusUnauthorized, "Non-super users cannot get all users")
     }
 
-    return hasher.Sum(nil), nil
+    ctx := context.Background()
+
+    coll := handler.HandlerConns.Db.Collection("User")
+    cur, err := coll.Find(ctx, bson.M{})
+    if err != nil {
+        return err
+    }
+
+    data := make([]User, 0)
+    err = cur.All(ctx, &data)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error reading result" })
+        return err
+    }
+
+    c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Data: data })
+
+    return nil
+}
+
+type UpdateUserPasswordBody struct {
+    OldPassword string `json:"old_password" validate:"required"`
+    NewPassword string `json:"new_password" validate:"required"`
+}
+
+func (handler *UserHandler) UpdateUserPassword(c echo.Context) error {
+    body := new(UpdateUserPasswordBody)
+    if err := GetRequestBody(c, body); err != nil {
+        return err
+    }
+
+    claims := GetJwtClaims(c)
+
+    coll := handler.HandlerConns.Db.Collection("User")
+
+    user := new(User)
+    if err := coll.FindOne(context.Background(), bson.M{"_id": claims.UserId}).Decode(user); err != nil {
+        if err == mongo.ErrNoDocuments {
+            c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "User does not exist" })
+            return echo.ErrUnauthorized
+        }
+        return err
+    }
+
+    correct, err := verifyPassword(body.OldPassword, user.Salt, user.Password)
+    if err != nil {
+        return err
+    }
+    if !correct {
+        c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Incorrect old pasword" })
+        return nil
+    }
+
+    password, salt, err := generateSaltAndPasswordHash(body.NewPassword)
+    if err != nil {
+        return err
+    }
+    user.Password = password
+    user.Salt = salt
+
+    c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Message: "Password changed successfully" })
+
+    return nil
+}
+
+func generateSaltAndPasswordHash(passwordText string) (password string, salt string, err error) {
+    saltBytes := make([]byte, 32)
+    if _, err = rand.Read(saltBytes); err != nil {
+        err = echo.NewHTTPError(http.StatusInternalServerError, "Error generating salt")
+        return
+    }
+    salt = hex.EncodeToString(saltBytes)
+
+    saltedPwd := append([]byte(passwordText), saltBytes...)
+    pwdHash, err := sha256Hash(saltedPwd)
+    if err != nil {
+        err = echo.NewHTTPError(http.StatusInternalServerError, "Error hashing password")
+        return
+    }
+    password = hex.EncodeToString(pwdHash)
+
+    return
+}
+
+func verifyPassword(passwordText string, salt string, targetHash string) (bool, error) {
+    saltBytes, err := hex.DecodeString(salt)
+    if err != nil {
+        return false, echo.NewHTTPError(http.StatusInternalServerError, "Error verifying password")
+    }
+    saltedPwd := append([]byte(passwordText), saltBytes...)
+    pwdHash, err := sha256Hash(saltedPwd)
+    pwd := hex.EncodeToString(pwdHash)
+
+    return pwd == targetHash, nil
 }
 
