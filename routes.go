@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/DavidTan0527/EC-admin-dashboard/server/auth"
-	"github.com/DavidTan0527/EC-admin-dashboard/server/model"
+	"github.com/DavidTan0527/EC-admin-dashboard/auth"
+	"github.com/DavidTan0527/EC-admin-dashboard/model"
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	echojwt "github.com/labstack/echo-jwt/v4"

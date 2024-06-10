@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/DavidTan0527/EC-admin-dashboard/server/model"
+	"github.com/DavidTan0527/EC-admin-dashboard/model"
 	"github.com/joho/godotenv"
 )
 

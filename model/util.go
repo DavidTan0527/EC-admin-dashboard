@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"net/http"
 
-	"github.com/DavidTan0527/EC-admin-dashboard/server/auth"
+	"github.com/DavidTan0527/EC-admin-dashboard/auth"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 )
