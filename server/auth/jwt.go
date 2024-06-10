@@ -7,7 +7,7 @@ import (
 )
 
 const (
-    TokenValidity = 7 * 24 * time.Hour
+    TokenValidity = 3 * 24 * time.Hour
 )
 
 type JwtClaims struct {

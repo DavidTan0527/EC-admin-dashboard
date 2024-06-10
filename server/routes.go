@@ -62,8 +62,10 @@ func initRoutes(conns *model.HandlerConns) *echo.Echo {
 
 func initUserRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *Middlewares) {
     handler := model.UserHandler{ HandlerConns: httpHandler }
-    e.POST("/login", handler.LoginUser)
     e.POST("/register", handler.CreateUser, middlewares.Jwt)
+    e.POST("/login", handler.LoginUser)
+    e.POST("/changePwd", handler.UpdateUserPassword, middlewares.Jwt)
+
     e.GET("/user/:id", handler.GetUser, middlewares.Jwt)
     e.GET("/users", handler.GetAllUsers, middlewares.Jwt, middlewares.IsSuper)
 }
@@ -102,9 +104,14 @@ func initMiddlewares() *Middlewares {
 
 func setupMiddlewares(e *echo.Echo) {
     e.Logger.SetLevel(log.DEBUG)
+    if l, ok := e.Logger.(*log.Logger); ok {
+        l.SetHeader("${time_rfc3339} [${level}] ${short_file}:${line}\n")
+    }
+
     e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
         Format: "method=${method}, uri=${uri} (${latency_human}), status=${status}\nerror: ${error}\n",
     }))
+
     e.Validator = &RequestValidator{ validator: validator.New() }
 }
 

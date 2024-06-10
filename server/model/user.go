@@ -59,7 +59,7 @@ func (handler *UserHandler) LoginUser(c echo.Context) error {
     }
 
     claims := auth.NewJwtClaims()
-    claims.UserId = user.Id.String()
+    claims.UserId = user.Id.Hex()
     claims.IsSuper = user.IsSuper
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims) 
 
@@ -138,7 +138,7 @@ func (handler *UserHandler) GetUser(c echo.Context) error {
     }
 
     claims := GetJwtClaims(c)
-    if !claims.IsSuper && id.String() != claims.UserId {
+    if !claims.IsSuper && id.Hex() != claims.UserId {
         return echo.NewHTTPError(http.StatusUnauthorized, "Non-super users cannot get other users")
     }
 
@@ -198,13 +198,18 @@ func (handler *UserHandler) UpdateUserPassword(c echo.Context) error {
     }
 
     claims := GetJwtClaims(c)
+    c.Logger().Debug(claims)
+    id, err := primitive.ObjectIDFromHex(claims.UserId)
+    if err != nil {
+        return err
+    }
 
+    ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection("User")
 
     user := new(User)
-    if err := coll.FindOne(context.Background(), bson.M{"_id": claims.UserId}).Decode(user); err != nil {
+    if err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(user); err != nil {
         if err == mongo.ErrNoDocuments {
-            c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "User does not exist" })
             return echo.ErrUnauthorized
         }
         return err
@@ -215,7 +220,7 @@ func (handler *UserHandler) UpdateUserPassword(c echo.Context) error {
         return err
     }
     if !correct {
-        c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Incorrect old pasword" })
+        c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Incorrect old password" })
         return nil
     }
 
@@ -225,6 +230,12 @@ func (handler *UserHandler) UpdateUserPassword(c echo.Context) error {
     }
     user.Password = password
     user.Salt = salt
+
+    if result, err := coll.ReplaceOne(ctx, bson.M{"_id": id}, user); err != nil {
+        return err
+    } else if result.MatchedCount == 0 {
+        return echo.NewHTTPError(http.StatusInternalServerError, "Error updating password into DB")
+    }
 
     c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Message: "Password changed successfully" })
 
