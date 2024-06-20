@@ -9,6 +9,11 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+func Ping(c echo.Context) error {
+    c.JSON(http.StatusOK, HttpResponseBody{ Success: true })
+    return nil
+}
+
 func GetRequestBody(c echo.Context, body interface{}) error {
     if err := c.Bind(body); err != nil {
       return echo.NewHTTPError(http.StatusBadRequest, err.Error())

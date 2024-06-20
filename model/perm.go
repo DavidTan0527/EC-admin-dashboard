@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 )
@@ -17,56 +18,128 @@ type Permission struct {
 }
 
 const PERM_SET_KEY_PREFIX = "ec:permission:"
-
-type CheckPermBody struct {
-    Key string `json:"key" validate:"required"`
-}
+const USER_PREFIX = "user:"
 
 func (handler *PermissionHandler) CheckPerm(c echo.Context) error {
     claims := GetJwtClaims(c)
     userId := claims.UserId
 
-    body := new(CheckPermBody)
-    if err := GetRequestBody(c, body); err != nil {
-        return err
-    }
+    key := c.Param("key")
 
-    perm, err := handler.isMember("user:" + userId, PERM_SET_KEY_PREFIX + body.Key)
+    ctx := context.Background()
+    cmd := handler.HandlerConns.Redis.SIsMember(ctx, PERM_SET_KEY_PREFIX + key, USER_PREFIX + userId)
+
+    perm, err := cmd.Result()
     if err != nil {
-        c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
-        return err
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
     }
 
-    c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Data: perm })
+    return c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Data: perm })
+}
 
-    return nil
+type SetPermBody struct {
+    UserId string `json:"user_id" validate:"omitempty,hexadecimal"`
+    Key    string `json:"key" validate:"required"`
 }
 
 func (handler *PermissionHandler) SetPerm(c echo.Context) error {
-    claims := GetJwtClaims(c)
-    userId := claims.UserId
-
-    body := new(CheckPermBody)
+    body := new(SetPermBody)
     if err := GetRequestBody(c, body); err != nil {
-        return err
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+    }
+
+    if body.UserId == "" {
+        claims := GetJwtClaims(c)
+        body.UserId = claims.UserId
     }
 
     ctx := context.Background()
-    cmd := handler.HandlerConns.Redis.SAdd(ctx, PERM_SET_KEY_PREFIX + body.Key, "user:" + userId)
+    cmd := handler.HandlerConns.Redis.SAdd(ctx, PERM_SET_KEY_PREFIX + body.Key, USER_PREFIX + body.UserId)
 
     if _, err := cmd.Result(); err != nil {
-        c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error adding permission key" })
-        return err
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error adding permission key" })
     }
 
-    c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Message: "Added permission key " + body.Key })
-
-    return nil
+    return c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Message: "Added permission key " + body.Key })
 }
 
-func (handler *PermissionHandler) isMember(member string, key string) (bool, error) {
+func (handler *PermissionHandler) RemovePerm(c echo.Context) error {
+    body := new(SetPermBody)
+    if err := GetRequestBody(c, body); err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+    }
+
+    if body.UserId == "" {
+        claims := GetJwtClaims(c)
+        body.UserId = claims.UserId
+    }
+
     ctx := context.Background()
-    cmd := handler.HandlerConns.Redis.SIsMember(ctx, key, member)
-    return cmd.Result()
+    cmd := handler.HandlerConns.Redis.SRem(ctx, PERM_SET_KEY_PREFIX + body.Key, USER_PREFIX + body.UserId)
+
+    if _, err := cmd.Result(); err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error removing permission key" })
+    }
+
+    return c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Message: "Removed permission key " + body.Key })
+}
+
+func (handler *PermissionHandler) GetAllPagePermKey(c echo.Context) error {
+    ctx := context.Background()
+
+    keys := make([]string, 0)
+    var cursor uint64 = 0
+
+    for {
+        cmd := handler.HandlerConns.Redis.Scan(ctx, cursor, PERM_SET_KEY_PREFIX + "PG_*", 0)
+        result, cursor, err := cmd.Result()
+        if err != nil {
+            c.Logger().Error(err)
+            return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error scanning permission keys" })
+        }
+
+        for _, key := range result {
+            keys = append(keys, strings.TrimPrefix(key, PERM_SET_KEY_PREFIX))
+        }
+
+        if cursor == 0 {
+            break
+        }
+    }
+
+    return c.JSON(http.StatusOK, HttpResponseBody{
+        Success: true,
+        Data: keys,
+        Message: "Successfully get all page permission keys",
+    })
+}
+
+func (handler *PermissionHandler) GetPermUserList(c echo.Context) error {
+    ctx := context.Background()
+
+    key := c.Param("key")
+    var result []string
+
+    cmd := handler.HandlerConns.Redis.SMembers(ctx, PERM_SET_KEY_PREFIX + key)
+    users, err := cmd.Result()
+    if err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error getting users" })
+    }
+
+    for _, user := range users {
+        result = append(result, strings.TrimPrefix(user, USER_PREFIX))
+    }
+
+    return c.JSON(http.StatusOK, HttpResponseBody{
+        Success: true,
+        Message: "Success",
+        Data: result,
+    })
 }
 

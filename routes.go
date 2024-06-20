@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,11 +28,10 @@ func initRoutes(conns *model.HandlerConns) *echo.Echo {
     e := echo.New()
     setupMiddlewares(e)
 
-	e.GET("/ping", func(c echo.Context) error {
-		return c.String(http.StatusOK, "Hello, World!")
-	})
+    middlewares := initCustomMiddlewares()
 
-    middlewares := initMiddlewares()
+	e.GET("/ping", model.Ping)
+    e.GET("/checkToken", model.Ping, middlewares.Jwt)
     initUserRoutes(e, conns, middlewares)
     initPermRoutes(e, conns, middlewares)
 
@@ -64,25 +64,35 @@ func initUserRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *
     handler := model.UserHandler{ HandlerConns: httpHandler }
     e.POST("/register", handler.CreateUser, middlewares.Jwt)
     e.POST("/login", handler.LoginUser)
-    e.POST("/changePwd", handler.UpdateUserPassword, middlewares.Jwt)
+    e.POST("/change_pwd", handler.UpdateUserPassword, middlewares.Jwt)
 
     e.GET("/user/:id", handler.GetUser, middlewares.Jwt)
+    e.DELETE("/user/:id", handler.DeleteUser, middlewares.Jwt, middlewares.IsSuper)
     e.GET("/users", handler.GetAllUsers, middlewares.Jwt, middlewares.IsSuper)
 }
 
 func initPermRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *Middlewares) {
     handler := model.PermissionHandler{ HandlerConns: httpHandler }
-    e.GET("/permission", handler.CheckPerm, middlewares.Jwt)
+    e.GET("/permission/:key", handler.CheckPerm, middlewares.Jwt)
+    e.GET("/permission/:key/list", handler.GetPermUserList, middlewares.Jwt, middlewares.IsSuper)
     e.POST("/permission", handler.SetPerm, middlewares.Jwt, middlewares.IsSuper)
+    e.DELETE("/permission", handler.RemovePerm, middlewares.Jwt, middlewares.IsSuper)
+
+    e.GET("/permission_keys", handler.GetAllPagePermKey, middlewares.Jwt)
 }
 
-func initMiddlewares() *Middlewares {
+func initCustomMiddlewares() *Middlewares {
+    jwtKey, err := hex.DecodeString(os.Getenv("JWT_SECRET"))
+    if err != nil {
+        panic("Invalid JWT secret")
+    }
+
     return &Middlewares{
         Jwt: echojwt.WithConfig(echojwt.Config{
             NewClaimsFunc: func(c echo.Context) jwt.Claims {
                 return new(auth.JwtClaims)
             },
-            SigningKey: []byte(os.Getenv("JWT_SECRET")),
+            SigningKey: jwtKey,
         }),
 
         IsSuper: func (next echo.HandlerFunc) echo.HandlerFunc {
@@ -104,6 +114,9 @@ func initMiddlewares() *Middlewares {
 }
 
 func setupMiddlewares(e *echo.Echo) {
+    e.Use(middleware.CORS())
+    e.Validator = &RequestValidator{ validator: validator.New() }
+
     e.Logger.SetLevel(log.DEBUG)
     if l, ok := e.Logger.(*log.Logger); ok {
         l.SetHeader("${time_rfc3339} [${level}] ${short_file}:${line}\n")
@@ -112,7 +125,5 @@ func setupMiddlewares(e *echo.Echo) {
     e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
         Format: "method=${method}, uri=${uri} (${latency_human}), status=${status}\nerror: ${error}\n",
     }))
-
-    e.Validator = &RequestValidator{ validator: validator.New() }
 }
 
