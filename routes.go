@@ -34,6 +34,7 @@ func initRoutes(conns *model.HandlerConns) *echo.Echo {
     e.GET("/checkToken", model.Ping, middlewares.Jwt)
     initUserRoutes(e, conns, middlewares)
     initPermRoutes(e, conns, middlewares)
+    initTableRoutes(e, conns, middlewares)
 
     // Graceful shutdown
     ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -79,6 +80,13 @@ func initPermRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *
     e.DELETE("/permission", handler.RemovePerm, middlewares.Jwt, middlewares.IsSuper)
 
     e.GET("/permission_keys", handler.GetAllPagePermKey, middlewares.Jwt)
+}
+
+func initTableRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *Middlewares) {
+    handler := model.TableHandler{ HandlerConns: httpHandler }
+    e.GET("/table", handler.GetTableList, middlewares.Jwt)
+    e.POST("/table", handler.SetTable, middlewares.Jwt)
+    e.GET("/table/:table", handler.GetTable, middlewares.Jwt)
 }
 
 func initCustomMiddlewares() *Middlewares {

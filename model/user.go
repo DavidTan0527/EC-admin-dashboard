@@ -40,7 +40,7 @@ func (handler *UserHandler) LoginUser(c echo.Context) error {
         return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
     }
 
-    coll := handler.HandlerConns.Db.Collection("User")
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_USER)
 
     user := new(User)
     if err := coll.FindOne(context.Background(), bson.M{"username": body.Username}).Decode(user); err != nil {
@@ -123,7 +123,7 @@ func (handler *UserHandler) CreateUser(c echo.Context) error {
     user.Password = password
     user.Salt = salt
 
-    coll := handler.HandlerConns.Db.Collection("User")
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_USER)
     if err := coll.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(new(User)); err == nil {
         return c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Username exists" })
     } else if err != mongo.ErrNoDocuments {
@@ -156,7 +156,7 @@ func (handler *UserHandler) GetUser(c echo.Context) error {
 
     user := new(User)
 
-    coll := handler.HandlerConns.Db.Collection("User")
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_USER)
     result := coll.FindOne(context.Background(), bson.M{"_id": id})
     err = result.Decode(user)
     if err != nil {
@@ -180,7 +180,7 @@ func (handler *UserHandler) GetAllUsers(c echo.Context) error {
 
     ctx := context.Background()
 
-    coll := handler.HandlerConns.Db.Collection("User")
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_USER)
     cur, err := coll.Find(ctx, bson.M{})
     if err != nil {
         c.Logger().Error(err)
@@ -217,7 +217,7 @@ func (handler *UserHandler) UpdateUserPassword(c echo.Context) error {
     }
 
     ctx := context.Background()
-    coll := handler.HandlerConns.Db.Collection("User")
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_USER)
 
     user := new(User)
     if err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(user); err != nil {
@@ -268,7 +268,7 @@ func (handler *UserHandler) DeleteUser(c echo.Context) error {
     }
 
     ctx := context.Background()
-    coll := handler.HandlerConns.Db.Collection("User")
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_USER)
 
     _, err = coll.DeleteOne(ctx, bson.M{"_id": id })
     if err != nil {

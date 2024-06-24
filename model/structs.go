@@ -5,6 +5,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+const (
+    COLL_NAME_USER = "User"
+    COLL_NAME_TABLE = "Table"
+)
+
 type HandlerConns struct {
     Db    *mongo.Database
     Redis *redis.Client

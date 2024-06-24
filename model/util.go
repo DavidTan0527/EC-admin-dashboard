@@ -16,7 +16,7 @@ func Ping(c echo.Context) error {
 
 func GetRequestBody(c echo.Context, body interface{}) error {
     if err := c.Bind(body); err != nil {
-      return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+      return err
     }
     if err := c.Validate(body); err != nil {
       return err
