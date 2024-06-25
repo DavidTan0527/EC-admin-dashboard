@@ -96,7 +96,7 @@ func (handler *PermissionHandler) GetAllPagePermKey(c echo.Context) error {
     var cursor uint64 = 0
 
     for {
-        cmd := handler.HandlerConns.Redis.Scan(ctx, cursor, PERM_SET_KEY_PREFIX + "PG_*", 0)
+        cmd := handler.HandlerConns.Redis.Scan(ctx, cursor, PERM_SET_KEY_PREFIX + "*", 0)
         result, cursor, err := cmd.Result()
         if err != nil {
             c.Logger().Error(err)

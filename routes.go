@@ -87,6 +87,11 @@ func initTableRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares 
     e.GET("/table", handler.GetTableList, middlewares.Jwt)
     e.POST("/table", handler.SetTable, middlewares.Jwt)
     e.GET("/table/:table", handler.GetTable, middlewares.Jwt)
+    e.PUT("/table/:table", handler.RenameTable, middlewares.Jwt)
+    e.DELETE("/table/:table", handler.DeleteTable, middlewares.Jwt)
+
+    e.GET("/table/schema", handler.GetAllTableSchema, middlewares.Jwt)
+    e.GET("/table/schema/:table", handler.GetTableSchema, middlewares.Jwt)
 }
 
 func initCustomMiddlewares() *Middlewares {
