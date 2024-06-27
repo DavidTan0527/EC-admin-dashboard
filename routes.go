@@ -101,6 +101,7 @@ func initChartRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares 
     e.GET("/chart", handler.GetAllChart, middlewares.Jwt)
     e.POST("/chart", handler.CreateChart, middlewares.Jwt)
     e.PUT("/chart", handler.EditChart, middlewares.Jwt)
+    e.DELETE("/chart/:id", handler.DeleteChart, middlewares.Jwt)
 }
 
 func initCustomMiddlewares() *Middlewares {

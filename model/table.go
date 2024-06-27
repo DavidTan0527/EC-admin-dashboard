@@ -201,7 +201,7 @@ func (handler *TableHandler) DeleteTable(c echo.Context) error {
 
     if _, err := coll.DeleteOne(ctx, bson.M{"_id": id }); err != nil {
         c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error deleting user" })
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error deleting table" })
     }
 
     c.Logger().Infof("Table %s deleted", id)
