@@ -13,6 +13,10 @@ services:
         - path: ./
           target: /app/
           action: rebuild
+          ignore:
+            - .git/
+              tmp/
+              tags
   redis:
     image: redis
     command: bash -c "echo 'aclfile /run/secrets/acl' | redis-server -"

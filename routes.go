@@ -35,6 +35,7 @@ func initRoutes(conns *model.HandlerConns) *echo.Echo {
     initUserRoutes(e, conns, middlewares)
     initPermRoutes(e, conns, middlewares)
     initTableRoutes(e, conns, middlewares)
+    initChartRoutes(e, conns, middlewares)
 
     // Graceful shutdown
     ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -79,7 +80,7 @@ func initPermRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *
     e.POST("/permission", handler.SetPerm, middlewares.Jwt, middlewares.IsSuper)
     e.DELETE("/permission", handler.RemovePerm, middlewares.Jwt, middlewares.IsSuper)
 
-    e.GET("/permission_keys", handler.GetAllPagePermKey, middlewares.Jwt)
+    e.GET("/permission_keys", handler.GetAllPermKey, middlewares.Jwt)
 }
 
 func initTableRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *Middlewares) {
@@ -93,6 +94,13 @@ func initTableRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares 
 
     e.GET("/table/schema", handler.GetAllTableSchema, middlewares.Jwt)
     e.GET("/table/schema/:id", handler.GetTableSchema, middlewares.Jwt)
+}
+
+func initChartRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *Middlewares) {
+    handler := model.ChartHandler{ HandlerConns: httpHandler }
+    e.GET("/chart", handler.GetAllChart, middlewares.Jwt)
+    e.POST("/chart", handler.CreateChart, middlewares.Jwt)
+    e.PUT("/chart", handler.EditChart, middlewares.Jwt)
 }
 
 func initCustomMiddlewares() *Middlewares {

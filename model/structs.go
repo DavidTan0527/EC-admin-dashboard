@@ -8,6 +8,7 @@ import (
 const (
     COLL_NAME_USER = "User"
     COLL_NAME_TABLE = "Table"
+    COLL_NAME_CHART = "Chart"
 )
 
 type HandlerConns struct {

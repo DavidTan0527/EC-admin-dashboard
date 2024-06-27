@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -89,7 +90,7 @@ func (handler *PermissionHandler) RemovePerm(c echo.Context) error {
     return c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Message: "Removed permission key " + body.Key })
 }
 
-func (handler *PermissionHandler) GetAllPagePermKey(c echo.Context) error {
+func (handler *PermissionHandler) GetAllPermKey(c echo.Context) error {
     ctx := context.Background()
 
     keys := make([]string, 0)
@@ -111,6 +112,8 @@ func (handler *PermissionHandler) GetAllPagePermKey(c echo.Context) error {
             break
         }
     }
+
+    sort.Strings(keys)
 
     return c.JSON(http.StatusOK, HttpResponseBody{
         Success: true,

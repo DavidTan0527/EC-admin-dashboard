@@ -216,11 +216,7 @@ func (handler *TableHandler) GetAllTableSchema(c echo.Context) error {
     ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_TABLE)
 
-    opt := options.Find().SetProjection(bson.M{ "fields": 1 })
-
-    res := make([]struct {
-        Fields string `bson:"fields" json:"fields"`
-    }, 0)
+    opt := options.Find().SetProjection(bson.M{ "_id": 1, "name": 1, "fields": 1 })
 
     cursor, err := coll.Find(ctx, bson.D{}, opt)
     if err != nil {
@@ -231,7 +227,9 @@ func (handler *TableHandler) GetAllTableSchema(c echo.Context) error {
         return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
     }
 
-    if err = cursor.All(ctx, res); err != nil {
+    res := make([]Table, 0)
+
+    if err = cursor.All(ctx, &res); err != nil {
         c.Logger().Error(err)
         return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
     }
@@ -256,11 +254,9 @@ func (handler *TableHandler) GetTableSchema(c echo.Context) error {
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_TABLE)
 
     filter := bson.M{ "_id": id }
-    opt := options.FindOne().SetProjection(bson.M{ "fields": 1 })
+    opt := options.FindOne().SetProjection(bson.M{ "_id": 1, "name": 1, "fields": 1 })
 
-    var res struct {
-        Fields string `bson:"fields" json:"fields"`
-    }
+    var res Table 
     if err := coll.FindOne(ctx, filter, opt).Decode(&res); err != nil {
         if err == mongo.ErrNoDocuments {
             return c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Table does not exist" })
