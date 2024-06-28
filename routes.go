@@ -36,6 +36,7 @@ func initRoutes(conns *model.HandlerConns) *echo.Echo {
     initPermRoutes(e, conns, middlewares)
     initTableRoutes(e, conns, middlewares)
     initChartRoutes(e, conns, middlewares)
+    initChartViewRoutes(e, conns, middlewares)
 
     // Graceful shutdown
     ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -88,8 +89,8 @@ func initTableRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares 
     e.GET("/table", handler.GetTableList, middlewares.Jwt)
     e.POST("/table", handler.CreateTable, middlewares.Jwt)
     e.GET("/table/:id", handler.GetTable, middlewares.Jwt)
-    e.POST("/table/:id", handler.EditTable, middlewares.Jwt)
-    e.PUT("/table/:id", handler.RenameTable, middlewares.Jwt)
+    e.POST("/table/:id", handler.EditTableData, middlewares.Jwt)
+    e.PUT("/table/:id", handler.EditTableMetadata, middlewares.Jwt)
     e.DELETE("/table/:id", handler.DeleteTable, middlewares.Jwt)
 
     e.GET("/table/schema", handler.GetAllTableSchema, middlewares.Jwt)
@@ -99,9 +100,19 @@ func initTableRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares 
 func initChartRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *Middlewares) {
     handler := model.ChartHandler{ HandlerConns: httpHandler }
     e.GET("/chart", handler.GetAllChart, middlewares.Jwt)
+    e.GET("/chart/:id", handler.GetChart, middlewares.Jwt)
     e.POST("/chart", handler.CreateChart, middlewares.Jwt)
     e.PUT("/chart", handler.EditChart, middlewares.Jwt)
     e.DELETE("/chart/:id", handler.DeleteChart, middlewares.Jwt)
+}
+
+func initChartViewRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares *Middlewares) {
+    handler := model.ChartViewHandler{ HandlerConns: httpHandler }
+    e.GET("/chart_view", handler.GetChartViewList, middlewares.Jwt)
+    e.GET("/chart_view/:id", handler.LoadChartView, middlewares.Jwt)
+    e.POST("/chart_view", handler.CreateChartView, middlewares.Jwt)
+    e.PUT("/chart_view", handler.EditChartView, middlewares.Jwt)
+    e.DELETE("/chart_view/:id", handler.DeleteChartView, middlewares.Jwt)
 }
 
 func initCustomMiddlewares() *Middlewares {

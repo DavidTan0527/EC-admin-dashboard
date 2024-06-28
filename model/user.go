@@ -44,11 +44,7 @@ func (handler *UserHandler) LoginUser(c echo.Context) error {
 
     user := new(User)
     if err := coll.FindOne(context.Background(), bson.M{"username": body.Username}).Decode(user); err != nil {
-        if err == mongo.ErrNoDocuments {
-            return c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Username or password incorrect" })
-        }
-        c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+        return handleMongoErr(c, err)
     }
 
     correct, err := verifyPassword(body.Password, user.Salt, user.Password)
@@ -127,8 +123,7 @@ func (handler *UserHandler) CreateUser(c echo.Context) error {
     if err := coll.FindOne(context.Background(), bson.M{"username": user.Username}).Decode(new(User)); err == nil {
         return c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "Username exists" })
     } else if err != mongo.ErrNoDocuments {
-        c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+        return handleMongoErr(c, err)
     }
 
     c.Logger().Info("Creating user " + user.Username + " with password hash " + user.Password)
@@ -157,14 +152,8 @@ func (handler *UserHandler) GetUser(c echo.Context) error {
     user := new(User)
 
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_USER)
-    result := coll.FindOne(context.Background(), bson.M{"_id": id})
-    err = result.Decode(user)
-    if err != nil {
-        if err == mongo.ErrNoDocuments {
-            c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "User not found" })
-            return nil
-        }
-        return err
+    if err := coll.FindOne(context.Background(), bson.M{"_id": id}).Decode(user); err != nil {
+        return handleMongoErr(c, err)
     }
 
     c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Data: user })
@@ -183,15 +172,13 @@ func (handler *UserHandler) GetAllUsers(c echo.Context) error {
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_USER)
     cur, err := coll.Find(ctx, bson.M{})
     if err != nil {
-        c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+        return handleMongoErr(c, err)
     }
 
     data := make([]User, 0)
     err = cur.All(ctx, &data)
     if err != nil {
-        c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error reading result" })
+        return handleMongoErr(c, err)
     }
 
     return c.JSON(http.StatusOK, HttpResponseBody{ Success: true, Data: data })
@@ -221,11 +208,7 @@ func (handler *UserHandler) UpdateUserPassword(c echo.Context) error {
 
     user := new(User)
     if err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(user); err != nil {
-        if err == mongo.ErrNoDocuments {
-            return c.JSON(http.StatusOK, HttpResponseBody{ Success: false, Message: "User not found" })
-        }
-        c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+        return handleMongoErr(c, err)
     }
 
     correct, err := verifyPassword(body.OldPassword, user.Salt, user.Password)
@@ -272,8 +255,7 @@ func (handler *UserHandler) DeleteUser(c echo.Context) error {
 
     _, err = coll.DeleteOne(ctx, bson.M{"_id": id })
     if err != nil {
-        c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error deleting user" })
+        return handleMongoErr(c, err)
     }
 
     c.Logger().Info("User with ID " + id.Hex() + " deleted")

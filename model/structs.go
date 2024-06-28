@@ -9,6 +9,7 @@ const (
     COLL_NAME_USER = "User"
     COLL_NAME_TABLE = "Table"
     COLL_NAME_CHART = "Chart"
+    COLL_NAME_CHART_VIEW = "ChartView"
 )
 
 type HandlerConns struct {

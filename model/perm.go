@@ -27,10 +27,7 @@ func (handler *PermissionHandler) CheckPerm(c echo.Context) error {
 
     key := c.Param("key")
 
-    ctx := context.Background()
-    cmd := handler.HandlerConns.Redis.SIsMember(ctx, PERM_SET_KEY_PREFIX + key, USER_PREFIX + userId)
-
-    perm, err := cmd.Result()
+    perm, err := CheckPerm(handler.HandlerConns, userId, key)
     if err != nil {
         c.Logger().Error(err)
         return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
@@ -144,5 +141,11 @@ func (handler *PermissionHandler) GetPermUserList(c echo.Context) error {
         Message: "Success",
         Data: result,
     })
+}
+
+func CheckPerm(handlerConns *HandlerConns, userId string, key string) (bool, error) {
+    ctx := context.Background()
+    cmd := handlerConns.Redis.SIsMember(ctx, PERM_SET_KEY_PREFIX + key, USER_PREFIX + userId)
+    return cmd.Result()
 }
 

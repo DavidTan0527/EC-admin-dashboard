@@ -8,10 +8,10 @@ import (
 	"github.com/labstack/echo/v4"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type ChartHandler struct {
-    permHandler *PermissionHandler
     *HandlerConns
 }
 
@@ -24,6 +24,45 @@ type Chart struct {
     Options map[string]interface{} `bson:"options"  json:"options" validate:"required"`
 }
 
+var CHART_PERM_PROJECTION = bson.M{ "perm_key": 1 }
+
+func (handler *ChartHandler) GetChart(c echo.Context) error {
+    claims := GetJwtClaims(c)
+    userId := claims.UserId
+
+    id, err := primitive.ObjectIDFromHex(c.Param("id"))
+    if err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+    }
+
+    ctx := context.Background()
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_CHART)
+
+    c.Logger().Infof("Getting chart with id %s", id)
+
+    var chart Chart
+    if err := coll.FindOne(ctx, bson.M{"_id": id}).Decode(&chart); err != nil {
+        return handleMongoErr(c, err)
+    }
+
+    isAllowed, err := checkChartPerm(handler.HandlerConns, chart, userId)
+    if err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
+    }
+
+    if !isAllowed {
+        return c.JSON(http.StatusUnauthorized, HttpResponseBody{ Success: false, Message: "No permission to view this table" })
+    }
+
+    return c.JSON(http.StatusOK, HttpResponseBody{
+        Success: true,
+        Message: "Success",
+        Data: chart,
+    })
+}
+
 func (handler *ChartHandler) GetAllChart(c echo.Context) error {
     claims := GetJwtClaims(c)
     userId := claims.UserId
@@ -33,8 +72,7 @@ func (handler *ChartHandler) GetAllChart(c echo.Context) error {
 
     cur, err := coll.Find(ctx, bson.M{})
     if err != nil {
-        c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+        return handleMongoErr(c, err)
     }
 
     result := make([]Chart, 0)
@@ -42,20 +80,15 @@ func (handler *ChartHandler) GetAllChart(c echo.Context) error {
     for cur.Next(ctx) {
         var chart Chart
         if err := cur.Decode(&chart); err != nil {
-            c.Logger().Error(err)
-            return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Server error" })
+            return handleMongoErr(c, err)
         }
 
         c.Logger().Debug("Looking at chart: ", chart)
 
-        isAllowed := chart.PermKey == ""
-        if !isAllowed {
-            cmd := handler.HandlerConns.Redis.SIsMember(ctx, PERM_SET_KEY_PREFIX + chart.PermKey, USER_PREFIX + userId)
-            isAllowed, err = cmd.Result()
-            if err != nil {
-                c.Logger().Error(err)
-                return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
-            }
+        isAllowed, err := checkChartPerm(handler.HandlerConns, chart, userId)
+        if err != nil {
+            c.Logger().Error(err)
+            return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
         }
 
         if isAllowed {
@@ -98,6 +131,9 @@ func (handler *ChartHandler) CreateChart(c echo.Context) error {
 }
 
 func (handler *ChartHandler) EditChart(c echo.Context) error {
+    claims := GetJwtClaims(c)
+    userId := claims.UserId
+
     body := new(Chart)
     if err := GetRequestBody(c, body); err != nil {
         c.Logger().Error(err)
@@ -107,12 +143,21 @@ func (handler *ChartHandler) EditChart(c echo.Context) error {
     ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_CHART)
 
+    isAllowed, err := fetchCheckChartPerm(handler.HandlerConns, body.Id, userId)
+    if err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
+    }
+
+    if !isAllowed {
+        return c.JSON(http.StatusUnauthorized, HttpResponseBody{ Success: false, Message: "No permission to view this table" })
+    }
+
     filter := bson.M{ "_id": body.Id }
 
     res, err := coll.ReplaceOne(ctx, filter, body)
     if err != nil {
-        c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Cannot save chart into DB" })
+        return handleMongoErr(c, err)
     }
 
     c.Logger().Info("Chart edited:", res)
@@ -124,6 +169,9 @@ func (handler *ChartHandler) EditChart(c echo.Context) error {
 }
 
 func (handler *ChartHandler) DeleteChart(c echo.Context) error {
+    claims := GetJwtClaims(c)
+    userId := claims.UserId
+
     id, err := primitive.ObjectIDFromHex(c.Param("id"))
     if err != nil {
         c.Logger().Error(err)
@@ -133,16 +181,47 @@ func (handler *ChartHandler) DeleteChart(c echo.Context) error {
     ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_CHART)
 
-    if _, err := coll.DeleteOne(ctx, bson.M{"_id": id }); err != nil {
+    isAllowed, err := fetchCheckChartPerm(handler.HandlerConns, id, userId)
+    if err != nil {
         c.Logger().Error(err)
-        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error deleting chart" })
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
+    }
+
+    if !isAllowed {
+        return c.JSON(http.StatusUnauthorized, HttpResponseBody{ Success: false, Message: "No permission to view this table" })
+    }
+
+    if _, err := coll.DeleteOne(ctx, bson.M{"_id": id }); err != nil {
+        return handleMongoErr(c, err)
     }
 
     c.Logger().Infof("Chart %s deleted", id)
 
     return c.JSON(http.StatusOK, HttpResponseBody{
         Success: true,
-        Message: "Successfully deleted table",
+        Message: "Successfully deleted chart",
     })
+}
+
+func fetchCheckChartPerm(handlerConns *HandlerConns, id primitive.ObjectID, userId string) (bool, error) {
+    ctx := context.Background()
+    coll := handlerConns.Db.Collection(COLL_NAME_CHART)
+
+    filter := bson.M{ "_id": id }
+    opt := options.FindOne().SetProjection(CHART_PERM_PROJECTION)
+
+    var chart Chart 
+    if err := coll.FindOne(ctx, filter, opt).Decode(&chart); err != nil {
+        return false, err
+    }
+    
+    return checkChartPerm(handlerConns, chart, userId)
+}
+
+func checkChartPerm(handlerConns *HandlerConns, chart Chart, userId string) (bool, error) {
+    if chart.PermKey == "" {
+        return true, nil
+    }
+    return CheckPerm(handlerConns, userId, chart.PermKey)
 }
 
