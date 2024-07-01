@@ -20,11 +20,11 @@ type TableHandler struct {
 type ObjArray = []map[string]interface{}
 
 type Table struct {
-    Id      primitive.ObjectID                       `bson:"_id,omitempty"`
-    Name    string                                   `bson:"name"`
-    PermKey string                                   `bson:"perm_key"`
-    Fields  ObjArray                                 `bson:"fields"`
-    Data    map[string]map[string]primitive.ObjectID `bson:"data"`
+    Id      primitive.ObjectID                       `bson:"_id,omitempty" json:"id"`
+    Name    string                                   `bson:"name" json:"name"`
+    PermKey string                                   `bson:"perm_key" json:"permKey"`
+    Fields  ObjArray                                 `bson:"fields" json:"fields"`
+    Data    map[string]map[string]primitive.ObjectID `bson:"data" json:"data"`
 }
 
 type TableFull struct {
@@ -238,6 +238,12 @@ func (handler *TableHandler) CreateTable(c echo.Context) error {
     }
 
     body.Id = primitive.NewObjectID()
+    if body.Fields == nil {
+        body.Fields = make([]map[string]interface{}, 0)
+    }
+    if body.Data == nil {
+        body.Data = make(map[string]map[string]primitive.ObjectID)
+    }
 
     ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_TABLE)
