@@ -13,11 +13,6 @@ type PermissionHandler struct {
     *HandlerConns
 }
 
-type Permission struct {
-    CanView bool `json:"can_view"`
-    CanEdit bool `json:"can_edit"`
-}
-
 const PERM_SET_KEY_PREFIX = "ec:permission:"
 const USER_PREFIX = "user:"
 
@@ -27,7 +22,7 @@ func (handler *PermissionHandler) CheckPerm(c echo.Context) error {
 
     key := c.Param("key")
 
-    perm, err := CheckPerm(handler.HandlerConns, userId, key)
+    perm, err := checkPerm(handler.HandlerConns, userId, key)
     if err != nil {
         c.Logger().Error(err)
         return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
@@ -143,7 +138,7 @@ func (handler *PermissionHandler) GetPermUserList(c echo.Context) error {
     })
 }
 
-func CheckPerm(handlerConns *HandlerConns, userId string, key string) (bool, error) {
+func checkPerm(handlerConns *HandlerConns, userId string, key string) (bool, error) {
     ctx := context.Background()
     cmd := handlerConns.Redis.SIsMember(ctx, PERM_SET_KEY_PREFIX + key, USER_PREFIX + userId)
     return cmd.Result()

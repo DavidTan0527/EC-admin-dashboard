@@ -88,8 +88,9 @@ func initTableRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares 
     handler := model.TableHandler{ HandlerConns: httpHandler }
     e.GET("/table", handler.GetTableList, middlewares.Jwt)
     e.POST("/table", handler.CreateTable, middlewares.Jwt)
-    e.GET("/table/:id", handler.GetTable, middlewares.Jwt)
-    e.POST("/table/:id", handler.EditTableData, middlewares.Jwt)
+    e.GET("/table/:id", handler.GetTableFull, middlewares.Jwt)
+    e.GET("/table/:id/:year/:month", handler.GetTable, middlewares.Jwt)
+    e.POST("/table/:id/:year/:month", handler.EditTableData, middlewares.Jwt)
     e.PUT("/table/:id", handler.EditTableMetadata, middlewares.Jwt)
     e.DELETE("/table/:id", handler.DeleteTable, middlewares.Jwt)
 

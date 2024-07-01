@@ -19,7 +19,7 @@ type Chart struct {
     Id      primitive.ObjectID     `bson:"_id"      json:"id"`
     Type    string                 `bson:"type"     json:"type"    validate:"required"`
     Title   string                 `bson:"title"    json:"title"   validate:"required"`
-    PermKey string                 `bson:"perm_key" json:"permKey" validate:"required"`
+    PermKey string                 `bson:"perm_key" json:"permKey"`
     TableId primitive.ObjectID     `bson:"table_id" json:"tableId" validate:"required"`
     Options map[string]interface{} `bson:"options"  json:"options" validate:"required"`
 }
@@ -46,7 +46,7 @@ func (handler *ChartHandler) GetChart(c echo.Context) error {
         return handleMongoErr(c, err)
     }
 
-    isAllowed, err := checkChartPerm(handler.HandlerConns, chart, userId)
+    isAllowed, err := handler.checkChartPerm(chart, userId)
     if err != nil {
         c.Logger().Error(err)
         return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
@@ -85,7 +85,7 @@ func (handler *ChartHandler) GetAllChart(c echo.Context) error {
 
         c.Logger().Debug("Looking at chart: ", chart)
 
-        isAllowed, err := checkChartPerm(handler.HandlerConns, chart, userId)
+        isAllowed, err := handler.checkChartPerm(chart, userId)
         if err != nil {
             c.Logger().Error(err)
             return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
@@ -143,7 +143,7 @@ func (handler *ChartHandler) EditChart(c echo.Context) error {
     ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_CHART)
 
-    isAllowed, err := fetchCheckChartPerm(handler.HandlerConns, body.Id, userId)
+    isAllowed, err := handler.fetchCheckChartPerm(body.Id, userId)
     if err != nil {
         c.Logger().Error(err)
         return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
@@ -181,7 +181,7 @@ func (handler *ChartHandler) DeleteChart(c echo.Context) error {
     ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_CHART)
 
-    isAllowed, err := fetchCheckChartPerm(handler.HandlerConns, id, userId)
+    isAllowed, err := handler.fetchCheckChartPerm(id, userId)
     if err != nil {
         c.Logger().Error(err)
         return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
@@ -203,9 +203,9 @@ func (handler *ChartHandler) DeleteChart(c echo.Context) error {
     })
 }
 
-func fetchCheckChartPerm(handlerConns *HandlerConns, id primitive.ObjectID, userId string) (bool, error) {
+func (handler *ChartHandler) fetchCheckChartPerm(id primitive.ObjectID, userId string) (bool, error) {
     ctx := context.Background()
-    coll := handlerConns.Db.Collection(COLL_NAME_CHART)
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_CHART)
 
     filter := bson.M{ "_id": id }
     opt := options.FindOne().SetProjection(CHART_PERM_PROJECTION)
@@ -215,13 +215,13 @@ func fetchCheckChartPerm(handlerConns *HandlerConns, id primitive.ObjectID, user
         return false, err
     }
     
-    return checkChartPerm(handlerConns, chart, userId)
+    return handler.checkChartPerm(chart, userId)
 }
 
-func checkChartPerm(handlerConns *HandlerConns, chart Chart, userId string) (bool, error) {
+func (handler *ChartHandler) checkChartPerm(chart Chart, userId string) (bool, error) {
     if chart.PermKey == "" {
         return true, nil
     }
-    return CheckPerm(handlerConns, userId, chart.PermKey)
+    return checkPerm(handler.HandlerConns, userId, chart.PermKey)
 }
 

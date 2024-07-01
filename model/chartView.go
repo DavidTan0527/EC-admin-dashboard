@@ -78,7 +78,7 @@ func (handler *ChartViewHandler) LoadChartView(c echo.Context) error {
 
         c.Logger().Debug("Looking at chart: ", chart)
 
-        isAllowed, err := checkChartPerm(handler.HandlerConns, chart, userId)
+        isAllowed, err := handler.checkChartPerm(chart, userId)
         if err != nil {
             c.Logger().Error(err)
             return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: "Error checking permission key" })
@@ -168,5 +168,12 @@ func (handler *ChartViewHandler) DeleteChartView(c echo.Context) error {
         Success: true,
         Message: "Successfully deleted chart view",
     })
+}
+
+func (handler *ChartViewHandler) checkChartPerm(chart Chart, userId string) (bool, error) {
+    if chart.PermKey == "" {
+        return true, nil
+    }
+    return checkPerm(handler.HandlerConns, userId, chart.PermKey)
 }
 
