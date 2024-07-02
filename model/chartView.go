@@ -61,18 +61,12 @@ func (handler *ChartViewHandler) LoadChartView(c echo.Context) error {
         return handleMongoErr(c, err)
     }
 
-    coll_chart := handler.HandlerConns.Db.Collection(COLL_NAME_CHART)
+    collChart := handler.HandlerConns.Db.Collection(COLL_NAME_CHART)
 
-    cur, err := coll_chart.Find(ctx, bson.M{"_id": bson.M{ "$in": chartView.ChartIds }})
-    if err != nil {
-        return handleMongoErr(c, err)
-    }
-
-    result := make([]Chart, 0)
-
-    for cur.Next(ctx) {
+    result := make([]Chart, 0, len(chartView.ChartIds))
+    for _, id := range chartView.ChartIds {
         var chart Chart
-        if err := cur.Decode(&chart); err != nil {
+        if err := collChart.FindOne(ctx, bson.M{ "_id": id }).Decode(&chart); err != nil {
             return handleMongoErr(c, err)
         }
 
