@@ -94,6 +94,8 @@ func initTableRoutes(e *echo.Echo, httpHandler *model.HandlerConns, middlewares 
     e.PUT("/table/:id", handler.EditTableMetadata, middlewares.Jwt)
     e.DELETE("/table/:id", handler.DeleteTable, middlewares.Jwt)
 
+    e.PUT("/table/sort/:id", handler.EditTableSort, middlewares.Jwt)
+
     e.GET("/table/schema", handler.GetAllTableSchema, middlewares.Jwt)
     e.GET("/table/schema/:id", handler.GetTableSchema, middlewares.Jwt)
 }

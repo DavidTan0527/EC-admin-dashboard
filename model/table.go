@@ -23,6 +23,7 @@ type Table struct {
     Id      primitive.ObjectID                       `bson:"_id,omitempty" json:"id"`
     Name    string                                   `bson:"name" json:"name"`
     PermKey string                                   `bson:"perm_key" json:"permKey"`
+    SortKey string                                   `bson:"sort_key" json:"sortKey"`
     Fields  ObjArray                                 `bson:"fields" json:"fields"`
     Data    map[string]map[string]primitive.ObjectID `bson:"data" json:"data"`
 }
@@ -52,6 +53,8 @@ var TABLE_BASIC_PROJECTION = bson.M{ "_id": 1, "name": 1, "perm_key": 1 }
 var TABLE_PERM_PROJECTION = bson.M{ "perm_key": 1 }
 var TABLE_METADATA_PROJECTION = bson.M{ "_id": 1, "name": 1, "perm_key": 1, "fields": 1 }
 
+var SORT_FIELDS = bson.M{ "sort_key": 1 }
+
 func (handler *TableHandler) GetTableList(c echo.Context) error {
     claims := GetJwtClaims(c)
     userId := claims.UserId
@@ -59,7 +62,7 @@ func (handler *TableHandler) GetTableList(c echo.Context) error {
     ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_TABLE)
 
-    opts := options.Find().SetProjection(TABLE_BASIC_PROJECTION)
+    opts := options.Find().SetProjection(TABLE_BASIC_PROJECTION).SetSort(SORT_FIELDS)
     cur, err := coll.Find(ctx, bson.M{}, opts)
     if err != nil {
         return handleMongoErr(c, err)
@@ -336,6 +339,63 @@ func (handler *TableHandler) EditTableMetadata(c echo.Context) error {
 
     c.Logger().Infof("Editing table %s metadata", id)
 
+    claims := GetJwtClaims(c)
+    userId := claims.UserId
+    if perm, err := handler.fetchCheckTablePerm(id, userId); err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: err.Error() })
+    } else if !perm {
+        return c.JSON(http.StatusUnauthorized, HttpResponseBody{ Success: false, Message: "No permission" })
+    }
+
+    if _, err := coll.UpdateOne(ctx, filter, update); err != nil {
+        return handleMongoErr(c, err)
+    }
+
+    return c.JSON(http.StatusOK, HttpResponseBody{
+        Success: true,
+        Message: "Edited",
+    })
+}
+
+type EditTableSortBody struct {
+    SortKey int `json:"sortKey"`
+}
+
+func (handler *TableHandler) EditTableSort(c echo.Context) error {
+    id, err := primitive.ObjectIDFromHex(c.Param("id"))
+    if err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: err.Error() })
+    }
+
+    body := new(EditTableSortBody)
+    if err := GetRequestBody(c, body); err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusBadRequest, HttpResponseBody{ Success: false, Message: err.Error() })
+    }
+
+    ctx := context.Background()
+    coll := handler.HandlerConns.Db.Collection(COLL_NAME_TABLE)
+
+    filter := bson.M{ "_id": id }
+    update := bson.M{
+        "$set": bson.M{
+            "sort_key": body.SortKey,
+        },
+    }
+
+    c.Logger().Infof("Editing table %s sort to %d", id, body.SortKey)
+
+    claims := GetJwtClaims(c)
+    userId := claims.UserId
+    if perm, err := handler.fetchCheckTablePerm(id, userId); err != nil {
+        c.Logger().Error(err)
+        return c.JSON(http.StatusInternalServerError, HttpResponseBody{ Success: false, Message: err.Error() })
+    } else if !perm {
+        return c.JSON(http.StatusUnauthorized, HttpResponseBody{ Success: false, Message: "No permission" })
+    }
+
     if _, err := coll.UpdateOne(ctx, filter, update); err != nil {
         return handleMongoErr(c, err)
     }
@@ -385,7 +445,7 @@ func (handler *TableHandler) GetAllTableSchema(c echo.Context) error {
     ctx := context.Background()
     coll := handler.HandlerConns.Db.Collection(COLL_NAME_TABLE)
 
-    opt := options.Find().SetProjection(TABLE_METADATA_PROJECTION)
+    opt := options.Find().SetProjection(TABLE_METADATA_PROJECTION).SetSort(SORT_FIELDS)
     cur, err := coll.Find(ctx, bson.D{}, opt)
     if err != nil {
         return handleMongoErr(c, err)
