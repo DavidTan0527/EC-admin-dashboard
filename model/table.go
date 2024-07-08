@@ -23,7 +23,7 @@ type Table struct {
     Id      primitive.ObjectID                       `bson:"_id,omitempty" json:"id"`
     Name    string                                   `bson:"name" json:"name"`
     PermKey string                                   `bson:"perm_key" json:"permKey"`
-    SortKey string                                   `bson:"sort_key" json:"sortKey"`
+    SortKey int                                      `bson:"sort_key" json:"sortKey"`
     Fields  ObjArray                                 `bson:"fields" json:"fields"`
     Data    map[string]map[string]primitive.ObjectID `bson:"data" json:"data"`
 }
