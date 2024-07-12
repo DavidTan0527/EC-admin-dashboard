@@ -22,6 +22,8 @@ services:
     command: bash -c "echo 'aclfile /run/secrets/acl' | redis-server -"
     ports:
       - 8001:${REDIS_PORT}
+    volumes:
+      - /data/redis:/data
     secrets:
       - acl
 
